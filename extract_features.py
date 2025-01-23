@@ -27,6 +27,11 @@ def extract_llm_features(filenames, dataset, args):
     """
 
     texts = [str(x['text'][args.caption_idx]) for x in dataset]
+
+    print("FILENAMES")
+    print()
+
+    filenames = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
         
     for llm_model_name in filenames[::-1]:
         save_path = utils.to_feature_filename(
@@ -53,6 +58,7 @@ def extract_llm_features(filenames, dataset, args):
 
         # hack to get around HF mapping data incorrectly when using model-parallel
         device = next(language_model.parameters()).device
+        print(device)
 
         for i in trange(0, len(dataset), args.batch_size):
             # get embedding cuda device
