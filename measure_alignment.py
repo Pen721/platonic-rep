@@ -61,8 +61,98 @@ def compute_score(x_feats, y_feats, metric="mutual_knn", topk=10, normalize=True
     
     return best_alignment_score, best_alignment_indices
 
+def compute_score_and_return_all(x_feats, y_feats, metric="mutual_knn", topk=10, normalize=True):
+    """
+    Uses different layer combinations of x_feats and y_feats to find the best alignment
+    Args:
+        x_feats: a torch tensor of shape N x L x D
+        y_feats: a torch tensor of shape N x L x D
+    Returns:
+        best_alignment_score: the best alignment score
+        best_alignment: the indices of the best alignment
+        all_alignments: a numpy array of shape (L+1) x (L+1) containing alignment scores
+    """
+    best_alignment_indices = None
+    best_alignment_score = 0
+    all_alignments = np.zeros((x_feats.shape[1], y_feats.shape[1]))
+
+    for i in range(-1, x_feats.shape[1]):
+        x = x_feats.flatten(1, 2) if i == -1 else x_feats[:, i, :]
+
+        for j in range(-1, y_feats.shape[1]):
+            y = y_feats.flatten(1, 2) if j == -1 else y_feats[:, j, :]
+
+            kwargs = {}
+            if 'knn' in metric:
+                kwargs['topk'] = topk
+                    
+            if normalize:
+                x = F.normalize(x, p=2, dim=-1)
+                y = F.normalize(y, p=2, dim=-1)
+            
+            score = metrics.AlignmentMetrics.measure(metric, x, y, **kwargs)
+            all_alignments[i, j] = score
+
+            if score > best_alignment_score:
+                best_alignment_score = score
+                best_alignment_indices = (i, j)
+    
+    return best_alignment_score, best_alignment_indices, all_alignments
+
     
 def compute_alignment(x_feat_paths, y_feat_paths, metric, topk, precise=True):
+    """
+    Args:
+        x_feat_paths: list of paths to x features
+        y_feat_paths: list of paths to y features
+        metric: the metric to use
+        topk: the number of nearest neighbors to use (specific to knn metrics)
+        precise: if true use exact quantiling. (helpful to set to false if running on cpu)
+            this is more of a feature to speed up matmul if using float32 
+            used in measure_alignment.py
+    Returns:
+        alignment_scores: a numpy array of shape len(x_feat_paths) x len(y_feat_paths)
+        alignment_indices: a numpy array of shape len(x_feat_paths) x len(y_feat_paths) x 2
+    """
+    
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    symmetric_metric = (x_feat_paths == y_feat_paths)
+    if metric == "cycle_knn":
+        symmetric_metric = False
+
+    alignment_scores = np.zeros((len(x_feat_paths), len(y_feat_paths)))
+    alignment_indices = np.zeros((len(x_feat_paths), len(y_feat_paths), 2))
+
+    pbar = tqdm(total=len(y_feat_paths) * len(x_feat_paths))
+
+    for i, x_fp in enumerate(x_feat_paths):
+        x_feats = prepare_features(torch.load(x_fp, map_location="cuda:0")["feats"].float(), exact=precise)
+            
+        for j, y_fp in enumerate(y_feat_paths):
+            if symmetric_metric:
+                if i > j:
+                    pbar.update(1)
+                    continue           
+                        
+            y_feats = prepare_features(torch.load(y_fp, map_location="cuda:0")["feats"].float(), exact=precise)
+            best_score, best_indices, all_alignments = compute_score_and_return_all(y_feats, x_feats, metric=metric, topk=topk)
+            
+            alignment_scores[i, j] = best_score
+            alignment_indices[i, j] = best_indices
+            
+            if symmetric_metric:
+                alignment_scores[j, i] = best_score
+                alignment_indices[j, i] = best_indices[::-1]
+
+            pbar.update(1)
+
+            del y_feats
+            torch.cuda.empty_cache()
+
+    return alignment_scores, alignment_indices, all_alignments
+
+def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, topk, precise=True):
     """
     Args:
         x_feat_paths: list of paths to x features
@@ -114,7 +204,6 @@ def compute_alignment(x_feat_paths, y_feat_paths, metric, topk, precise=True):
 
     return alignment_scores, alignment_indices
 
-
 if __name__ == "__main__":
     """
     recommended to use llm as modality_x since it will load each LLM features once
@@ -155,19 +244,30 @@ if __name__ == "__main__":
             args.modality_y, args.pool_y, args.prompt_y,
             args.metric, args.topk
     )
+
+    all_alignments_save_path = utils.to_all_alignment_filename(
+            args.output_dir, args.dataset, args.modelset,
+            args.modality_x, args.pool_x, args.prompt_x,
+            args.modality_y, args.pool_y, args.prompt_y,
+            args.metric, args.topk
+    )
     
-    if os.path.exists(save_path) and not args.force_remake:
-        print(f"alignment already exists at {save_path}")
-        exit()
+    # if os.path.exists(save_path) and not args.force_remake:
+    #     print(f"alignment already exists at {save_path}")
+    #     exit()
     
     llm_models, lvm_models = get_models(args.modelset, modality='all')
     models_x = llm_models if args.modality_x == "language" else lvm_models
     models_y = llm_models if args.modality_y == "language" else lvm_models
+
+    models_x = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
+    models_y = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
     
     models_x_paths = [utils.to_feature_filename(args.input_dir, args.dataset, args.subset, m, args.pool_x, args.prompt_x) for m in models_x]
     models_y_paths = [utils.to_feature_filename(args.input_dir, args.dataset, args.subset, m, args.pool_y, args.prompt_y) for m in models_y]
     
     for fn in models_x_paths + models_y_paths:
+        print(fn)
         assert os.path.exists(fn), fn
     
     print(f"dataset:\t{args.dataset}")
@@ -181,9 +281,14 @@ if __name__ == "__main__":
     pprint(models_y_paths)
     
     print('\nmeasuring alignment')
-    alignment_scores, alignment_indices = compute_alignment(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
+    alignment_scores, alignment_indices, all_alignments = compute_alignment(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     np.save(save_path, {"scores": alignment_scores, "indices": alignment_indices})
     print(f"saved to {save_path}")
+    
+    # Save all alignments
+    os.makedirs(os.path.dirname(all_alignments_save_path), exist_ok=True)
+    np.save(all_alignments_save_path, {"all_alignments": all_alignments})
+    print(f"saved all alignments to {all_alignments_save_path}")
     
