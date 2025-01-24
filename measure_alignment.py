@@ -10,8 +10,7 @@ import metrics
 from tasks import get_models
 import utils
 from pprint import pprint
-
-
+import pickle
 
 def prepare_features(feats, q=0.95, exact=False):
     """
@@ -178,6 +177,8 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
 
     pbar = tqdm(total=len(y_feat_paths) * len(x_feat_paths))
 
+    all_model_all_layer_alignments = {}
+
     for i, x_fp in enumerate(x_feat_paths):
         x_feats = prepare_features(torch.load(x_fp, map_location="cuda:0")["feats"].float(), exact=precise)
             
@@ -188,10 +189,12 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
                     continue           
                         
             y_feats = prepare_features(torch.load(y_fp, map_location="cuda:0")["feats"].float(), exact=precise)
-            best_score, best_indices = compute_score(y_feats, x_feats, metric=metric, topk=topk)
+            best_score, best_indices, all_alignments = compute_score_and_return_all(y_feats, x_feats, metric=metric, topk=topk)
             
             alignment_scores[i, j] = best_score
             alignment_indices[i, j] = best_indices
+
+            all_model_all_layer_alignments[(i, j)] = all_alignments
             
             if symmetric_metric:
                 alignment_scores[j, i] = best_score
@@ -202,7 +205,7 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
             del y_feats
             torch.cuda.empty_cache()
 
-    return alignment_scores, alignment_indices
+    return alignment_scores, alignment_indices, all_model_all_layer_alignments
 
 if __name__ == "__main__":
     """
@@ -260,8 +263,8 @@ if __name__ == "__main__":
     models_x = llm_models if args.modality_x == "language" else lvm_models
     models_y = llm_models if args.modality_y == "language" else lvm_models
 
-    models_x = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
-    models_y = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
+    #models_x = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
+    #models_y = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
     
     models_x_paths = [utils.to_feature_filename(args.input_dir, args.dataset, args.subset, m, args.pool_x, args.prompt_x) for m in models_x]
     models_y_paths = [utils.to_feature_filename(args.input_dir, args.dataset, args.subset, m, args.pool_y, args.prompt_y) for m in models_y]
@@ -281,7 +284,7 @@ if __name__ == "__main__":
     pprint(models_y_paths)
     
     print('\nmeasuring alignment')
-    alignment_scores, alignment_indices, all_alignments = compute_alignment(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
+    alignment_scores, alignment_indices, all_alignments = compute_alignment_and_save_all_results(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     np.save(save_path, {"scores": alignment_scores, "indices": alignment_indices})
@@ -289,6 +292,7 @@ if __name__ == "__main__":
     
     # Save all alignments
     os.makedirs(os.path.dirname(all_alignments_save_path), exist_ok=True)
-    np.save(all_alignments_save_path, {"all_alignments": all_alignments})
+    with open(all_alignments_save_path, 'wb') as f:
+        pickle.dump(all_alignments, f)
     print(f"saved all alignments to {all_alignments_save_path}")
     

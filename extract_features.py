@@ -28,10 +28,10 @@ def extract_llm_features(filenames, dataset, args):
 
     texts = [str(x['text'][args.caption_idx]) for x in dataset]
 
-    print("FILENAMES")
-    print()
+    # print("FILENAMES")
+    # print()
 
-    filenames = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
+    # filenames = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
         
     for llm_model_name in filenames[::-1]:
         save_path = utils.to_feature_filename(

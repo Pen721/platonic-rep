@@ -44,7 +44,7 @@ def to_all_alignment_filename(output_dir, dataset, modelset,
         dataset,
         modelset,
         f"all_alignments_{modality_x}_pool-{pool_x}_prompt-{prompt_x}_{modality_y}_pool-{pool_y}_prompt-{prompt_y}",
-        f"{metric}_k{topk}.npy" if 'knn' in metric else f"all_alignments_{metric}.npy"
+        f"{metric}_k{topk}.pkl" if 'knn' in metric else f"all_alignments_{metric}.pkl"
     )
     return save_path
     
