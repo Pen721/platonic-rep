@@ -4,6 +4,7 @@ import PIL.Image
 import urllib
 import traceback
 import json
+import requests
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -12,7 +13,6 @@ from datasets import load_dataset
 from datasets.utils.file_utils import get_datasets_user_agent
 
 USER_AGENT = get_datasets_user_agent()
-
 
 def get_image(pil_data):
     return pil_data.convert("RGB")
@@ -142,7 +142,6 @@ def prepare_facebook_pmd_dataset(
     print("done.\n")
     print(f"load the dataset via \t`load_dataset('minhuh/prh', revision={save_subset}, split='train')`")        
     return
-
 
 if __name__ == "__main__":
     # example code of how the data partition was generated

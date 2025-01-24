@@ -11,7 +11,7 @@ from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 from torchvision.models.feature_extraction import create_feature_extractor
 
-from datasets import load_dataset
+from datasets import load_dataset, load_single_language_data
 from tasks import get_models
 from models import load_llm, load_tokenizer
 import utils 
@@ -31,7 +31,8 @@ def extract_llm_features(filenames, dataset, args):
     # print("FILENAMES")
     # print()
 
-    # filenames = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
+    filenames = ['bigscience/bloomz-560m']
+    #filenames = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
         
     for llm_model_name in filenames[::-1]:
         save_path = utils.to_feature_filename(
@@ -200,7 +201,8 @@ if __name__ == "__main__":
     llm_models, lvm_models = get_models(args.modelset, modality=args.modality)
     
     # load dataset once outside    
-    dataset = load_dataset(args.dataset, revision=args.subset, split='train')
+    dataset = load_single_language_data('en')
+    #dataset = load_dataset(args.dataset, revision=args.subset, split='train')
 
     if args.modality in ["all", "language"]:
         # extract all language model features
