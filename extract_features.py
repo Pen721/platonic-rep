@@ -11,7 +11,8 @@ from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 from torchvision.models.feature_extraction import create_feature_extractor
 
-from datasets import load_dataset, load_single_language_data
+from datasets import load_dataset
+from utils import load_single_language_data
 from tasks import get_models
 from models import load_llm, load_tokenizer
 import utils 

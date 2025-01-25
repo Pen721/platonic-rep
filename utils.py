@@ -85,3 +85,35 @@ def cross_entropy_to_bits_per_unit(losses, input_strings, unit="byte"):
     # mormalize by the total number of bytes per input string
     bits_per_byte = losses_in_bits / bytes_per_input
     return bits_per_byte
+
+from datasets import Dataset
+import PIL.Image
+import numpy as np
+
+def create_compatible_dataset(english_strings, output_name="custom_dataset", revision="default"):
+    # Create a dummy image since the script requires images
+    dummy_image = PIL.Image.fromarray(np.zeros((224, 224, 3), dtype=np.uint8))
+    
+    # Create dataset with required fields
+    dataset_dict = {
+        "text": [[text] for text in english_strings],  # Wrap each text in a list as expected
+        "image": [dummy_image] * len(english_strings)  # Add dummy images
+    }
+    
+    # Create HuggingFace dataset
+    dataset = Dataset.from_dict(dataset_dict)
+    
+    # Save dataset (optional)
+    dataset.save_to_disk(f"./data/{output_name}/{revision}")
+    
+    return dataset
+
+def load_single_language_data(language):
+    assert language in ["en", "zh"]
+
+    with open(f'test_datasets/testsets/testset/UNv1.0.testset.{language}', 'r') as f:
+        lines = f.read().splitlines()
+        print("English text:")
+        print(f.read())
+
+    return create_compatible_dataset(lines)
