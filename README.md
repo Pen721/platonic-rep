@@ -54,8 +54,8 @@ After extracting the features, you can compute the alignment score by
 python measure_alignment.py --dataset minhuh/prh --subset wit_1024 --modelset val \
         --modality_x language --pool_x avg --modality_y vision --pool_y cls
 
-python measure_alignment.py --dataset_x en --dataset_y zh --subset wit_1024 --modelset val 
-        --modality_x language --pool_x avg --modality_y language --pool_y avg
+python measure_alignment.py --dataset_x en --dataset_y en --subset wit_1024 --modelset val \
+        --modality_x language --pool_x avg --modality_y language --pool_y avg --save_all_alignments=True
 ```
 
 The resulting alignment scores will be stored in `./results/alignment`

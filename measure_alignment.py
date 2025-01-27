@@ -121,6 +121,154 @@ def compute_score_and_return_all(x_feats, y_feats, metric="mutual_knn", topk=10,
     
     return best_alignment_score, best_alignment_indices, all_alignments
 
+# def compute_score_and_return_all(x_feats, y_feats, metric="mutual_knn", topk=10, normalize=True):
+#     """
+#     Memory-efficient version that processes one layer combination at a time
+#     Args:
+#         x_feats: a torch tensor of shape N x L x D
+#         y_feats: a torch tensor of shape N x L x D
+#     Returns:
+#         best_alignment_score: the best alignment score
+#         best_alignment: the indices of the best alignment
+#         all_alignments: a numpy array of shape (L+1) x (L+1) containing alignment scores
+#     """
+#     best_alignment_indices = None
+#     best_alignment_score = 0
+#     all_alignments = np.zeros((x_feats.shape[1], y_feats.shape[1]))
+
+#     def process_layer_pair(x, y):
+#         """Helper function to process a single layer pair"""
+#         if normalize:
+#             x = F.normalize(x.clone(), p=2, dim=-1)
+#             y = F.normalize(y.clone(), p=2, dim=-1)
+        
+#         kwargs = {}
+#         if 'knn' in metric:
+#             kwargs['topk'] = topk
+        
+#         score = metrics.AlignmentMetrics.measure(metric, x, y, **kwargs)
+        
+#         # Clear any intermediate tensors
+#         del x
+#         del y
+#         torch.cuda.empty_cache()
+        
+#         return score
+
+#     # Process flattened features first
+#     x_flat = x_feats.flatten(1, 2)
+#     y_flat = y_feats.flatten(1, 2)
+#     flat_score = process_layer_pair(x_flat, y_flat)
+#     del x_flat
+#     del y_flat
+#     torch.cuda.empty_cache()
+
+#     # Track best score from flattened comparison
+#     if flat_score > best_alignment_score:
+#         best_alignment_score = flat_score
+#         best_alignment_indices = (-1, -1)
+
+#     # Process individual layer combinations
+#     for i in range(x_feats.shape[1]):
+#         x = x_feats[:, i, :]
+        
+#         # Compare with flattened y
+#         y_flat = y_feats.flatten(1, 2)
+#         score = process_layer_pair(x, y_flat)
+#         if score > best_alignment_score:
+#             best_alignment_score = score
+#             best_alignment_indices = (i, -1)
+#         del y_flat
+        
+#         # Compare with individual y layers
+#         for j in range(y_feats.shape[1]):
+#             y = y_feats[:, j, :]
+#             score = process_layer_pair(x, y)
+#             all_alignments[i, j] = score
+            
+#             if score > best_alignment_score:
+#                 best_alignment_score = score
+#                 best_alignment_indices = (i, j)
+            
+#             del y
+        
+#         del x
+#         torch.cuda.empty_cache()
+
+#     return best_alignment_score, best_alignment_indices, all_alignments
+
+# def compute_score(x_feats, y_feats, metric="mutual_knn", topk=10, normalize=True):
+#     """
+#     Memory-efficient version that only keeps track of best score
+#     Args:
+#         x_feats: a torch tensor of shape N x L x D
+#         y_feats: a torch tensor of shape N x L x D
+#     Returns:
+#         best_alignment_score: the best alignment score
+#         best_alignment: the indices of the best alignment
+#     """
+#     best_alignment_indices = None
+#     best_alignment_score = 0
+
+#     def process_layer_pair(x, y):
+#         """Helper function to process a single layer pair"""
+#         if normalize:
+#             x = F.normalize(x.clone(), p=2, dim=-1)
+#             y = F.normalize(y.clone(), p=2, dim=-1)
+        
+#         kwargs = {}
+#         if 'knn' in metric:
+#             kwargs['topk'] = topk
+        
+#         score = metrics.AlignmentMetrics.measure(metric, x, y, **kwargs)
+        
+#         # Clear any intermediate tensors
+#         del x
+#         del y
+#         torch.cuda.empty_cache()
+        
+#         return score
+
+#     # Process flattened features first
+#     x_flat = x_feats.flatten(1, 2)
+#     y_flat = y_feats.flatten(1, 2)
+#     flat_score = process_layer_pair(x_flat, y_flat)
+#     del x_flat
+#     del y_flat
+#     torch.cuda.empty_cache()
+
+#     # Track best score from flattened comparison
+#     if flat_score > best_alignment_score:
+#         best_alignment_score = flat_score
+#         best_alignment_indices = (-1, -1)
+
+#     # Process individual layer combinations
+#     for i in range(x_feats.shape[1]):
+#         x = x_feats[:, i, :]
+        
+#         # Compare with flattened y
+#         y_flat = y_feats.flatten(1, 2)
+#         score = process_layer_pair(x, y_flat)
+#         if score > best_alignment_score:
+#             best_alignment_score = score
+#             best_alignment_indices = (i, -1)
+#         del y_flat
+        
+#         # Compare with individual y layers
+#         for j in range(y_feats.shape[1]):
+#             y = y_feats[:, j, :]
+#             score = process_layer_pair(x, y)
+            
+#             if score > best_alignment_score:
+#                 best_alignment_score = score
+#                 best_alignment_indices = (i, j)
+            
+#             del y
+        
+#         del x
+#         torch.cuda.empty_cache()
+
+#     return best_alignment_score, best_alignment_indices
     
 def compute_alignment(x_feat_paths, y_feat_paths, metric, topk, precise=True):
     """
@@ -174,7 +322,7 @@ def compute_alignment(x_feat_paths, y_feat_paths, metric, topk, precise=True):
 
     return alignment_scores, alignment_indices, all_alignments
 
-def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, topk, precise=True, batch_size=1000):
+def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, topk, all_alignments_save_dir='all_alignments', precise=True, batch_size=1000):
     """
     Args:
         x_feat_paths: list of paths to x features
@@ -199,14 +347,23 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
 
     pbar = tqdm(total=len(y_feat_paths) * len(x_feat_paths))
 
-    all_model_all_layer_alignments = {}
+    # Save model paths mapping for reference
+    model_paths_mapping = {
+        'x_paths': x_feat_paths,
+        'y_paths': y_feat_paths
+    }
+
+    mapping_path = os.path.join(all_alignments_save_dir, 'model_paths_mapping.pkl')
+    os.makedirs(all_alignments_save_dir, exist_ok=True)
+    with open(mapping_path, 'wb') as f:
+        pickle.dump(model_paths_mapping, f)
 
     # Process largest models first (assuming they're ordered by size)
-    for i, x_fp in enumerate(x_feat_paths[::-1]):
+    for i, x_fp in enumerate(x_feat_paths[:11]):
         # Load features in half precision to save memory
         x_feats = prepare_features(torch.load(x_fp, map_location="cuda:0")["feats"].half(), exact=precise)
             
-        for j, y_fp in enumerate(y_feat_paths[::-1]):
+        for j, y_fp in enumerate(y_feat_paths[:11]):
             if symmetric_metric and i > j:
                 pbar.update(1)
                 continue           
@@ -218,7 +375,6 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
                     y_feats, x_feats, 
                     metric=metric, 
                     topk=topk,
-                    batch_size=batch_size
                 )
             except RuntimeError as e:
                 if "out of memory" in str(e):
@@ -237,8 +393,9 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
             alignment_scores[i, j] = best_score
             alignment_indices[i, j] = best_indices
             
-            # Move alignments to CPU immediately
-            all_model_all_layer_alignments[(i, j)] = all_alignments.detach().cpu()
+            # Save alignments to disk immediately
+            alignment_path = os.path.join(all_alignments_save_dir, f"{i}_{j}_alignment.npy")
+            torch.save(all_alignments, alignment_path)
             
             if symmetric_metric:
                 alignment_scores[j, i] = best_score
@@ -247,14 +404,14 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
             pbar.update(1)
 
             # Clean up GPU memory
-            del y_feats
+            del y_feats, all_alignments
             torch.cuda.empty_cache()
         
         # Clean up GPU memory after processing each x_feat
         del x_feats
         torch.cuda.empty_cache()
 
-    return alignment_scores, alignment_indices, all_model_all_layer_alignments
+    return alignment_scores, alignment_indices, 
 
 if __name__ == "__main__":
     """
@@ -289,7 +446,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.dataset_x == args.dataset_y:
+    if args.dataset_x == args.dataset_y and args.dataset_x == "minhuh/prh":
         args.dataset_x = args.dataset
         args.dataset_y = args.dataset
     else:
@@ -314,6 +471,15 @@ if __name__ == "__main__":
             args.modality_y, args.pool_y, args.prompt_y,
             args.metric, args.topk
     )
+    
+    all_alignments_save_dir = utils.to_all_alignment_save_dir(
+            args.output_dir, args.dataset, args.modelset,
+            args.modality_x, args.pool_x, args.prompt_x,
+            args.modality_y, args.pool_y, args.prompt_y,
+            args.metric, args.topk
+    )
+
+    os.makedirs(os.path.dirname(all_alignments_save_dir), exist_ok=True)
     
     # if os.path.exists(save_path) and not args.force_remake:
     #     print(f"alignment already exists at {save_path}")
@@ -346,18 +512,18 @@ if __name__ == "__main__":
     print('\nmeasuring alignment')
 
     if args.save_all_alignments:
-        alignment_scores, alignment_indices, all_alignments = compute_alignment_and_save_all_results(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
+        alignment_scores, alignment_indices = compute_alignment_and_save_all_results(models_x_paths, models_y_paths, args.metric, args.topk, all_alignments_save_dir = all_alignments_save_dir)
+        # Save all alignments
+        # if args.save_all_alignments:
+        #     os.makedirs(os.path.dirname(all_alignments_save_path), exist_ok=True)
+        #     with open(all_alignments_save_path, 'wb') as f:
+        #         pickle.dump(all_alignments, f)
+        #     print(f"saved all alignments to {all_alignments_save_path}")
     else:
         alignment_scores, alignment_indices = compute_alignment(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     np.save(save_path, {"scores": alignment_scores, "indices": alignment_indices})
     print(f"saved to {save_path}")
-    
-    # Save all alignments
-    if args.save_all_alignments:
-        os.makedirs(os.path.dirname(all_alignments_save_path), exist_ok=True)
-        with open(all_alignments_save_path, 'wb') as f:
-            pickle.dump(all_alignments, f)
-        print(f"saved all alignments to {all_alignments_save_path}")
+
     

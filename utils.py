@@ -47,6 +47,17 @@ def to_all_alignment_filename(output_dir, dataset, modelset,
         f"{metric}_k{topk}.pkl" if 'knn' in metric else f"all_alignments_{metric}.pkl"
     )
     return save_path
+
+def to_all_alignment_save_dir(output_dir, dataset, modelset, 
+                          modality_x, pool_x, prompt_x, 
+                          modality_y, pool_y, prompt_y, 
+                          metric, topk):
+    save_path = os.path.join(
+        output_dir,
+        dataset,
+        modelset,
+    )
+    return save_path
     
 def cross_entropy_loss(llm_inputs, llm_outputs):
     criterion = torch.nn.CrossEntropyLoss(reduction="none")
