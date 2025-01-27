@@ -1,7 +1,7 @@
 *.sh
 data/
-results/
 !results/alignment/**
+results/
 *pt
 *egg-info/**
 **__pycache__/**
