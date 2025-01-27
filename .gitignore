@@ -7,3 +7,4 @@ results/
 *.pyc*
 .venv/**
 .DS_Store
+!results/alignment/**
