@@ -1,10 +1,10 @@
 *.sh
 data/
 results/
+!results/alignment/**
 *pt
 *egg-info/**
 **__pycache__/**
 *.pyc*
 .venv/**
 .DS_Store
-!results/alignment/**
