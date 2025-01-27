@@ -213,7 +213,7 @@ if __name__ == "__main__":
     """
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset",        type=str, default="prh/minhuh")
+    parser.add_argument("--dataset",        type=str, default="minhuh/prh")
     parser.add_argument("--subset",         type=str, default="wit_1024")
 
     parser.add_argument("--modality_x",     type=str, default="all", choices=["vision", "language", "all"])
@@ -232,6 +232,9 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir",     type=str, default="./results/alignment")
     parser.add_argument("--precise",        action="store_true")
     parser.add_argument("--force_remake",   action="store_true")
+
+    parser.add_argument("--dataset_x",      type=str, default="minhuh/prh")
+    parser.add_argument("--dataset_y",      type=str, default="ninhuh/prh")
 
     args = parser.parse_args()
     
@@ -266,8 +269,8 @@ if __name__ == "__main__":
     #models_x = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
     #models_y = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
     
-    models_x_paths = [utils.to_feature_filename(args.input_dir, args.dataset, args.subset, m, args.pool_x, args.prompt_x) for m in models_x]
-    models_y_paths = [utils.to_feature_filename(args.input_dir, args.dataset, args.subset, m, args.pool_y, args.prompt_y) for m in models_y]
+    models_x_paths = [utils.to_feature_filename(args.input_dir, args.dataset_x, args.subset, m, args.pool_x, args.prompt_x) for m in models_x]
+    models_y_paths = [utils.to_feature_filename(args.input_dir, args.dataset_y, args.subset, m, args.pool_y, args.prompt_y) for m in models_y]
     
     for fn in models_x_paths + models_y_paths:
         print(fn)

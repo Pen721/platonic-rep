@@ -109,11 +109,9 @@ def create_compatible_dataset(english_strings, output_name="custom_dataset", rev
     return dataset
 
 def load_single_language_data(language):
-    assert language in ["en", "zh"]
+    assert language in ["ar", "en", "es", "fr", "ids", "ru", "zh"]
 
     with open(f'test_datasets/testsets/testset/UNv1.0.testset.{language}', 'r') as f:
         lines = f.read().splitlines()
-        print("English text:")
-        print(f.read())
 
     return create_compatible_dataset(lines)

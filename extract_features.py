@@ -32,7 +32,7 @@ def extract_llm_features(filenames, dataset, args):
     # print("FILENAMES")
     # print()
 
-    filenames = ['bigscience/bloomz-560m']
+    #filenames = ['bigscience/bloomz-560m']
     #filenames = ['bigscience/bloomz-1b1', 'bigscience/bloomz-560m']
         
     for llm_model_name in filenames[::-1]:
@@ -202,8 +202,10 @@ if __name__ == "__main__":
     llm_models, lvm_models = get_models(args.modelset, modality=args.modality)
     
     # load dataset once outside    
-    dataset = load_single_language_data('en')
-    #dataset = load_dataset(args.dataset, revision=args.subset, split='train')
+    if args.dataset in ["ar", "en", "es", "fr", "ids", "ru", "zh"]:
+        dataset = load_single_language_data(args.dataset)
+    else:
+        dataset = load_dataset(args.dataset, revision=args.subset, split='train')
 
     if args.modality in ["all", "language"]:
         # extract all language model features

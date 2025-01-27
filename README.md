@@ -38,6 +38,8 @@ First, we extract features from the models.
 # extract all language model features and pool them along each block
 python extract_features.py --dataset minhuh/prh --subset wit_1024 --modelset val --modality language --pool avg
 
+python extract_features.py --dataset en --modelset val --modality language --pool avg
+
 # Extract last layer features of all vision models
 python extract_features.py --dataset minhuh/prh --subset wit_1024 --modelset val --modality vision --pool cls
 ```
