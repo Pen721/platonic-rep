@@ -38,7 +38,7 @@ First, we extract features from the models.
 # extract all language model features and pool them along each block
 python extract_features.py --dataset minhuh/prh --subset wit_1024 --modelset val --modality language --pool avg
 
-python extract_features.py --dataset en --modelset val --modality language --pool avg
+# python extract_features.py --dataset en --modelset val --modality language --pool avg
 
 # Extract last layer features of all vision models
 python extract_features.py --dataset minhuh/prh --subset wit_1024 --modelset val --modality vision --pool cls
@@ -53,6 +53,9 @@ After extracting the features, you can compute the alignment score by
 ```bash
 python measure_alignment.py --dataset minhuh/prh --subset wit_1024 --modelset val \
         --modality_x language --pool_x avg --modality_y vision --pool_y cls
+
+python measure_alignment.py --dataset_x en --dataset_y zh --subset wit_1024 --modelset val 
+        --modality_x language --pool_x avg --modality_y language --pool_y avg
 ```
 
 The resulting alignment scores will be stored in `./results/alignment`

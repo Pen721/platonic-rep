@@ -24,6 +24,29 @@ def prepare_features(feats, q=0.95, exact=False):
     feats = metrics.remove_outliers(feats.float(), q=q, exact=exact)
     return feats.cuda()
 
+# def prepare_features(feats, q=0.95, exact=False):
+#     """
+#     Prepare features by removing outliers and normalizing, doing quantile calculation on CPU
+#     Args:
+#         feats: a torch tensor of any shape
+#         q: the quantile to remove outliers
+#         exact: whether to use exact quantile computation
+#     Returns:
+#         feats: a torch tensor of the same shape as the input
+#     """
+#     # Move to CPU for quantile calculation
+#     feats_cpu = feats.float().cpu()
+#     feats_flat = feats_cpu.abs().flatten(start_dim=1)
+#     q_val = torch.quantile(feats_flat, q, dim=1).mean()
+    
+#     # Move back to GPU for the thresholding operation
+#     feats = feats.cuda()
+#     q_val = q_val.cuda()
+    
+#     # Apply thresholding
+#     feats = torch.minimum(feats.abs(), q_val) * torch.sign(feats)
+    
+#     return feats
 
 def compute_score(x_feats, y_feats, metric="mutual_knn", topk=10, normalize=True):
     """
@@ -135,7 +158,7 @@ def compute_alignment(x_feat_paths, y_feat_paths, metric, topk, precise=True):
                     continue           
                         
             y_feats = prepare_features(torch.load(y_fp, map_location="cuda:0")["feats"].float(), exact=precise)
-            best_score, best_indices, all_alignments = compute_score_and_return_all(y_feats, x_feats, metric=metric, topk=topk)
+            best_score, best_indices = compute_score(y_feats, x_feats, metric=metric, topk=topk)
             
             alignment_scores[i, j] = best_score
             alignment_indices[i, j] = best_indices
@@ -151,16 +174,15 @@ def compute_alignment(x_feat_paths, y_feat_paths, metric, topk, precise=True):
 
     return alignment_scores, alignment_indices, all_alignments
 
-def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, topk, precise=True):
+def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, topk, precise=True, batch_size=1000):
     """
     Args:
         x_feat_paths: list of paths to x features
         y_feat_paths: list of paths to y features
         metric: the metric to use
         topk: the number of nearest neighbors to use (specific to knn metrics)
-        precise: if true use exact quantiling. (helpful to set to false if running on cpu)
-            this is more of a feature to speed up matmul if using float32 
-            used in measure_alignment.py
+        precise: if true use exact quantiling
+        batch_size: size of batches for processing features
     Returns:
         alignment_scores: a numpy array of shape len(x_feat_paths) x len(y_feat_paths)
         alignment_indices: a numpy array of shape len(x_feat_paths) x len(y_feat_paths) x 2
@@ -179,22 +201,44 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
 
     all_model_all_layer_alignments = {}
 
-    for i, x_fp in enumerate(x_feat_paths):
-        x_feats = prepare_features(torch.load(x_fp, map_location="cuda:0")["feats"].float(), exact=precise)
+    # Process largest models first (assuming they're ordered by size)
+    for i, x_fp in enumerate(x_feat_paths[::-1]):
+        # Load features in half precision to save memory
+        x_feats = prepare_features(torch.load(x_fp, map_location="cuda:0")["feats"].half(), exact=precise)
             
-        for j, y_fp in enumerate(y_feat_paths):
-            if symmetric_metric:
-                if i > j:
-                    pbar.update(1)
-                    continue           
+        for j, y_fp in enumerate(y_feat_paths[::-1]):
+            if symmetric_metric and i > j:
+                pbar.update(1)
+                continue           
                         
-            y_feats = prepare_features(torch.load(y_fp, map_location="cuda:0")["feats"].float(), exact=precise)
-            best_score, best_indices, all_alignments = compute_score_and_return_all(y_feats, x_feats, metric=metric, topk=topk)
+            y_feats = prepare_features(torch.load(y_fp, map_location="cuda:0")["feats"].half(), exact=precise)
             
+            try:
+                best_score, best_indices, all_alignments = compute_score_and_return_all(
+                    y_feats, x_feats, 
+                    metric=metric, 
+                    topk=topk,
+                    batch_size=batch_size
+                )
+            except RuntimeError as e:
+                if "out of memory" in str(e):
+                    # If OOM occurs, try with a smaller batch size
+                    torch.cuda.empty_cache()
+                    best_score, best_indices, all_alignments = compute_score_and_return_all(
+                        y_feats, x_feats, 
+                        metric=metric, 
+                        topk=topk,
+                        batch_size=batch_size // 2
+                    )
+                else:
+                    raise e
+            
+            # Store results
             alignment_scores[i, j] = best_score
             alignment_indices[i, j] = best_indices
-
-            all_model_all_layer_alignments[(i, j)] = all_alignments
+            
+            # Move alignments to CPU immediately
+            all_model_all_layer_alignments[(i, j)] = all_alignments.detach().cpu()
             
             if symmetric_metric:
                 alignment_scores[j, i] = best_score
@@ -202,8 +246,13 @@ def compute_alignment_and_save_all_results(x_feat_paths, y_feat_paths, metric, t
 
             pbar.update(1)
 
+            # Clean up GPU memory
             del y_feats
             torch.cuda.empty_cache()
+        
+        # Clean up GPU memory after processing each x_feat
+        del x_feats
+        torch.cuda.empty_cache()
 
     return alignment_scores, alignment_indices, all_model_all_layer_alignments
 
@@ -236,8 +285,16 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_x",      type=str, default="minhuh/prh")
     parser.add_argument("--dataset_y",      type=str, default="ninhuh/prh")
 
+    parser.add_argument("--save_all_alignments",     type=bool, default=False)
+
     args = parser.parse_args()
-    
+
+    if args.dataset_x == args.dataset_y:
+        args.dataset_x = args.dataset
+        args.dataset_y = args.dataset
+    else:
+        args.dataset = args.dataset_x + "_" + args.dataset_y    
+
     if not args.precise:
         torch.set_float32_matmul_precision('high')
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -287,15 +344,20 @@ if __name__ == "__main__":
     pprint(models_y_paths)
     
     print('\nmeasuring alignment')
-    alignment_scores, alignment_indices, all_alignments = compute_alignment_and_save_all_results(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
+
+    if args.save_all_alignments:
+        alignment_scores, alignment_indices, all_alignments = compute_alignment_and_save_all_results(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
+    else:
+        alignment_scores, alignment_indices = compute_alignment(models_x_paths, models_y_paths, args.metric, args.topk, args.precise)
 
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     np.save(save_path, {"scores": alignment_scores, "indices": alignment_indices})
     print(f"saved to {save_path}")
     
     # Save all alignments
-    os.makedirs(os.path.dirname(all_alignments_save_path), exist_ok=True)
-    with open(all_alignments_save_path, 'wb') as f:
-        pickle.dump(all_alignments, f)
-    print(f"saved all alignments to {all_alignments_save_path}")
+    if args.save_all_alignments:
+        os.makedirs(os.path.dirname(all_alignments_save_path), exist_ok=True)
+        with open(all_alignments_save_path, 'wb') as f:
+            pickle.dump(all_alignments, f)
+        print(f"saved all alignments to {all_alignments_save_path}")
     
